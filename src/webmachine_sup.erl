@@ -21,8 +21,7 @@
 -behaviour(supervisor).
 
 %% External exports
--export([start_link/0, upgrade/0, start_logger/1]).
--export([start_perf_logger/1]).
+-export([start_link/0, upgrade/0, start_logger/0, start_logger/1]).
 
 %% supervisor callbacks
 -export([init/1]).
@@ -34,23 +33,31 @@
 start_link() ->
     supervisor:start_link({local, ?MODULE}, ?MODULE, []).
 
-start_logger(BaseDir) ->
-    case application:get_env(webzmachine, webmachine_logger_module) of
-        {ok, LoggerModule} ->
-            ChildSpec = 
-                {webmachine_logger,
-                 {LoggerModule, start_link, [BaseDir]},
-                 permanent, 5000, worker, dynamic},
+start_logger() ->
+    {ok, LogModule} = application:get_env(webzmachine, webmachine_logger_module),
+    start_logger(LogModule),
+    start_perf_logger().
+
+start_logger(Name) ->
+    case application:get_env(webzmachine, log_dir) of
+        {ok, LogDir} ->        
+            Path = ensure_dir(LogDir),
+            ChildSpec = {Name, {Name, start_link, [Path]}, permanent, 5000, worker, dynamic},
             supervisor:start_child(?MODULE, ChildSpec);
-        _ -> nop
+        undefined ->
+            {error, no_log_dir}
     end.
 
-start_perf_logger(BaseDir) ->
-    ChildSpec = 
-	{webmachine_perf_logger,
-	 {webmachine_perf_logger, start_link, [BaseDir]},
-	 permanent, 5000, worker, [webmachine_perf_logger]},
-    supervisor:start_child(?MODULE, ChildSpec).
+start_perf_logger() ->
+    case application:get_env(webzmachine, perf_log_dir) of
+        {ok, PerfDir} ->        
+            Path = ensure_dir(PerfDir),
+            ChildSpec = {webmachine_perf_logger, {webmachine_perf_logger, start_link, [Path]},
+                         permanent, 5000, worker, [webmachine_perf_logger]},
+            supervisor:start_child(?MODULE, ChildSpec);
+        undefined ->
+            {error, no_perf_log_dir}
+    end.
 
 %% @spec upgrade() -> ok
 %% @doc Add processes if necessary.
@@ -58,15 +65,15 @@ upgrade() ->
     {ok, {_, Specs}} = init([]),
 
     Old = sets:from_list(
-	    [Name || {Name, _, _, _} <- supervisor:which_children(?MODULE)]),
+            [Name || {Name, _, _, _} <- supervisor:which_children(?MODULE)]),
     New = sets:from_list([Name || {Name, _, _, _, _, _} <- Specs]),
     Kill = sets:subtract(Old, New),
 
     sets:fold(fun (Id, ok) ->
-		      supervisor:terminate_child(?MODULE, Id),
-		      supervisor:delete_child(?MODULE, Id),
-		      ok
-	      end, ok, Kill),
+                      supervisor:terminate_child(?MODULE, Id),
+                      supervisor:delete_child(?MODULE, Id),
+                      ok
+              end, ok, Kill),
 
     [supervisor:start_child(?MODULE, Spec) || Spec <- Specs],
     ok.
@@ -77,16 +84,17 @@ init([]) ->
     init_wmtrace(),
     Processes = [],
     {ok, {{one_for_one, 9, 10}, Processes}}.
-    
+
 init_wmtrace() ->
-    Dir = valid_wmtrace_dir(application:get_env(wmtrace_dir)),
-    ok = filelib:ensure_dir(filename:join(Dir, "test")),		
+    Dir = ensure_dir(default_wmtrace_dir(application:get_env(wmtrace_dir))),
     ets:new(?WMTRACE_CONF_TBL, [set, public, named_table]),
     ets:insert(?WMTRACE_CONF_TBL, {trace_dir, Dir}).
 
-valid_wmtrace_dir(undefined) -> filename:join([get_path(), "priv", "wmtrace"]);
-valid_wmtrace_dir({ok, Dir}) when is_list(Dir) -> Dir.
+default_wmtrace_dir({ok, Dir}) -> Dir;
+default_wmtrace_dir(undefined) -> filename:join("priv", "wmtrace").
 
-get_path() ->
+ensure_dir(Dir) ->
     {ok, CWD} = file:get_cwd(),
-    CWD.
+    Path = filename:join(CWD, Dir),
+    ok = filelib:ensure_dir(filename:join(Path, "dummy")),
+    Path.
