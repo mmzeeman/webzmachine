@@ -49,32 +49,9 @@ stop() ->
 stop(Name) ->
     mochiweb_http:stop(Name).
 
-init_reqdata(MochiReq) ->
-    Socket = MochiReq:get(socket),
-    Scheme = MochiReq:get(scheme),
-    Method = MochiReq:get(method),
-    RawPath = MochiReq:get(raw_path), 
-    Version = MochiReq:get(version),
-    Headers = MochiReq:get(headers),
-    %
-    ReqData0 = wrq:create(Socket,Method,Scheme,Version,RawPath,Headers),
-    {Peer, ReqData} = webmachine_request:get_peer(ReqData0),
-    PeerState = wrq:set_peer(Peer, ReqData),
-    LogData = #wm_log_data{req_id=webmachine_id:generate(),
-                           start_time=os:timestamp(),
-                           method=Method,
-                           headers=Headers,
-                           peer=PeerState#wm_reqdata.peer,
-                           path=RawPath,
-                           version=Version,
-                           response_code=404,
-                           response_length=0},
-    PeerState#wm_reqdata{log_data=LogData}.
-
-
 loop(MochiReq, LoopOpts) ->
     reset_process_dictionary(),
-    ReqData = init_reqdata(MochiReq),
+    ReqData = webzmachine:request(mochiweb, MochiReq),
     Host = case host_headers(ReqData) of
                [H|_] -> H;
                [] -> []
@@ -82,7 +59,7 @@ loop(MochiReq, LoopOpts) ->
     Path = wrq:path(ReqData),
     {Dispatch, ReqDispatch} = case proplists:get_value(dispatcher, LoopOpts) of
                                   undefined ->
-                                      DispatchList = proplists:get_vaule(dispatch_list, LoopOpts, []),
+                                      DispatchList = proplists:get_value(dispatch_list, LoopOpts, []),
                                       {webmachine_dispatcher:dispatch(Host, Path, DispatchList), ReqData};
                                   Dispatcher ->
                                       Dispatcher:dispatch(Host, Path, ReqData)                                      

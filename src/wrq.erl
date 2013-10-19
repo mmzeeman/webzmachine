@@ -16,7 +16,7 @@
 -module(wrq).
 -author('Justin Sheehy <justin@basho.com>').
 
--export([create/6,load_dispatch_data/7]).
+-export([create/1,create/6,load_dispatch_data/7]).
 -export([method/1,scheme/1, base_uri/1, version/1,peer/1,disp_path/1,path/1,raw_path/1,path_info/1,
          response_code/1,req_cookie/1,req_qs/1,req_headers/1,req_body/1,
          stream_req_body/2,resp_redirect/1,resp_headers/1,resp_body/1,
@@ -36,7 +36,8 @@ create(Socket,Method,Scheme,Version,RawPath,Headers) ->
     create(#wm_reqdata{
                 socket=Socket,
                 method=Method,scheme=Scheme,version=Version,
-                raw_path=RawPath,req_headers=prepare_headers(Headers),
+                raw_path=RawPath,
+                req_headers=prepare_headers(Headers),
                 path="defined_in_create",
                 req_cookie=defined_in_create,
                 req_qs=defined_in_create,
@@ -47,8 +48,10 @@ create(Socket,Method,Scheme,Version,RawPath,Headers) ->
                 path_info=dict:new(),
                 path_tokens=defined_in_load_dispatch_data,
                 disp_path=defined_in_load_dispatch_data,
-                resp_redirect=false, resp_headers=mochiweb_headers:empty(),
-                resp_body = <<>>, response_code=500}).
+                resp_redirect=false, 
+                resp_headers=mochiweb_headers:empty(),
+                resp_body = <<>>, 
+                response_code=500}).
 
 create(RD = #wm_reqdata{raw_path=RawPath}) ->
     {Path, _, _} = mochiweb_util:urlsplit_path(RawPath),
@@ -184,9 +187,11 @@ get_resp_header(HdrName, _RD=#wm_reqdata{resp_headers=RespH}) ->
 
 set_resp_header(K, V, RD=#wm_reqdata{resp_headers=RespH})
   when is_list(K),is_list(V) ->
+    io:fwrite(standard_error, "resp-header: ~p: ~p~n", [K, V]),
     RD#wm_reqdata{resp_headers=mochiweb_headers:enter(K, V, RespH)};
 set_resp_header(K, V, RD=#wm_reqdata{resp_headers=RespH})
   when is_list(K),is_binary(V) ->
+    io:fwrite(standard_error, "resp-header: ~p: ~p~n", [K, V]),
     RD#wm_reqdata{resp_headers=mochiweb_headers:enter(K, binary_to_list(V), RespH)}.
 
 set_resp_headers(Hdrs, RD=#wm_reqdata{resp_headers=RespH}) ->

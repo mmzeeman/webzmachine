@@ -22,30 +22,31 @@
 -author('Justin Sheehy <justin@basho.com>').
 -author('Andy Gross <andy@basho.com>').
 -author('Jeremy Latt <jeremy@basho.com>').
+-author('Maas-Maarten Zeeman <mmzeeman@xs4all.nl>').
 
 -export([render_error/3]).
 
 render_error(Code, ReqData, Reason) ->
     case webmachine_request:has_response_body(ReqData) of
-        {true,_} -> {webmachine_request:response_body(ReqData), ReqData};
-        {false,_} -> render_error_body(Code, ReqData, Reason)
+        true -> {webmachine_request:response_body(ReqData), ReqData};
+        false -> render_error_body(Code, ReqData, Reason)
     end.
 
 render_error_body(400, ReqData, _Reason) ->
     ReqData1 = wrq:set_resp_header("Content-Type", "text/html", ReqData),
-    {<<"<HTML><HEAD><TITLE>400 Bad Request</TITLE></HEAD><BODY><H1>Bad Request</H1>The request was invalid.<P><HR><ADDRESS>mochiweb+webmachine web server</ADDRESS></BODY></HTML>">>, ReqData1};
+    {<<"<HTML><HEAD><TITLE>400 Bad Request</TITLE></HEAD><BODY><H1>Bad Request</H1>The request was invalid.<P><HR><ADDRESS>elli+webmachine web server</ADDRESS></BODY></HTML>">>, ReqData1};
 
 render_error_body(404, ReqData, _Reason) ->
     ReqData1 = wrq:set_resp_header("Content-Type", "text/html", ReqData),
-    {<<"<HTML><HEAD><TITLE>404 Not Found</TITLE></HEAD><BODY><H1>Not Found</H1>The requested document was not found on this server.<P><HR><ADDRESS>mochiweb+webmachine web server</ADDRESS></BODY></HTML>">>, ReqData1};
+    {<<"<HTML><HEAD><TITLE>404 Not Found</TITLE></HEAD><BODY><H1>Not Found</H1>The requested document was not found on this server.<P><HR><ADDRESS>elli+webmachine web server</ADDRESS></BODY></HTML>">>, ReqData1};
 
 render_error_body(500, ReqData, Reason) ->
     ReqData1 = wrq:set_resp_header("Content-Type", "text/html", ReqData),
     Path = wrq:path(ReqData),
-    error_logger:error_msg("webmachine error: path=~p~n~p~n", [Path, Reason]),
+    error_logger:error_msg("elli error: path=~p~n~p~n", [Path, Reason]),
     STString = io_lib:format("~p", [Reason]),
     ErrorStart = "<html><head><title>500 Internal Server Error</title></head><body><h1>Internal Server Error</h1>The server encountered an error while processing this request:<br><pre>",
-    ErrorEnd = "</pre><P><HR><ADDRESS>mochiweb+webmachine web server</ADDRESS></body></html>",
+    ErrorEnd = "</pre><P><HR><ADDRESS>elli+webmachine web server</ADDRESS></body></html>",
     ErrorIOList = [ErrorStart,STString,ErrorEnd],
     {erlang:iolist_to_binary(ErrorIOList), ReqData1};
 
@@ -56,7 +57,7 @@ render_error_body(501, ReqData, _Reason) ->
     ErrorStr = io_lib:format("<html><head><title>501 Not Implemented</title>"
                              "</head><body><h1>Internal Server Error</h1>"
                              "The server does not support the ~p method.<br>"
-                             "<P><HR><ADDRESS>mochiweb+webmachine web server"
+                             "<P><HR><ADDRESS>elli+webmachine web server"
                              "</ADDRESS></body></html>",
                              [Method]),
     {erlang:iolist_to_binary(ErrorStr), ReqData1};
@@ -70,7 +71,7 @@ render_error_body(503, ReqData, _Reason) ->
                "The server is currently unable to handle "
                "the request due to a temporary overloading "
                "or maintenance of the server.<br>"
-               "<P><HR><ADDRESS>mochiweb+webmachine web server"
+               "<P><HR><ADDRESS>elli+webmachine web server"
                "</ADDRESS></body></html>",
     {list_to_binary(ErrorStr), ReqData1}.
 
