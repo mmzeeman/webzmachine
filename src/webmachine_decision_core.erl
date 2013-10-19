@@ -42,13 +42,13 @@ controller_call(Fun, Rs, Rd) ->
 		true ->
 			case proplists:lookup(Fun, Rd#wm_reqdata.cache) of
 				none -> 
-					{T, Rs1, Rd1} = Rs:do(Fun, Rd),
+					{T, Rs1, Rd1} = webmachine_controller:do(Fun, Rs, Rd),
 					{T, Rs1, Rd1#wm_reqdata{cache=[{Fun,T}|Rd1#wm_reqdata.cache]}};
 				{Fun, Cached} -> 
 					{Cached, Rs, Rd}
 			end;
 		false ->
-    		Rs:do(Fun, Rd)
+    		webmachine_controller:do(Fun, Rs, Rd)
 	end.
 
 cacheable(charsets_provided) -> true;
@@ -66,7 +66,7 @@ method(Rd) ->
     wrq:method(Rd).
 
 d(DecisionID, Rs, Rd) ->
-    Rs:log_d(DecisionID),
+    webmachine_controller:log_d(Rs, DecisionID),
     decision(DecisionID, Rs, Rd).
 
 respond(Code, Rs, Rd) ->
@@ -148,8 +148,8 @@ do_log(LogData) ->
         {ok, LoggerModule} -> spawn(LoggerModule, log_access, [LogData]);
         _ -> nop
     end,
-    case application:get_env(webzmachine, enable_perf_logger) of
-        {ok, true} ->
+    case application:get_env(webzmachine, perf_log_dir) of
+        {ok, _} ->
 	       spawn(webmachine_perf_logger, log, [LogData]);
 	   _ ->
 	       ignore
