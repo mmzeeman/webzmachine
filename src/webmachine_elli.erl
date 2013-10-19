@@ -29,10 +29,31 @@
 
 -behaviour(elli_handler).
 
+%% @doc Get a webmachine request record from an elli request.
+request(ElliReq) ->
+    Method = elli_request:method(ElliReq),
+    RawPath = binary:bin_to_list(elli_request:raw_path(ElliReq)),
+    Headers = elli_request:headers(ElliReq),
+    Version = webmachine_elli:version(ElliReq),
+    Peer = webmachine_elli:peer(ElliReq),
+    Body = elli_request:body(ElliReq),
+
+    {Path, _, _} = mochiweb_util:urlsplit_path(RawPath),
+
+    #wm_reqdata{method=Method,
+                version=Version, 
+                path=Path, 
+                raw_path=RawPath, 
+                path_info=dict:new(), 
+                req_headers=Headers,
+                req_body=Body,
+                resp_headers=mochiweb_headers:empty(), %% TODO
+                resp_body = <<>>, 
+                peer=Peer}.
+
+
 handle(#req{}=ElliReq, Args) ->
-    %% Delegate to our handler function
-    Req = webzmachine:request(elli, ElliReq),
-    handle(Req, Args);
+    handle(request(ElliReq), Args);
 handle(#wm_reqdata{}=ReqData, Args) ->
     Host = case host_headers(ReqData) of
                [H|_] -> H;
@@ -176,14 +197,14 @@ elli_webmachine_test() ->
                [{mods, [{webmachine_elli, [{dispatch_list, DispatchList}]}]}
               ]}],
 
-    {404, _, _} = Res1 = elli_test:call('GET', <<"/hello/world">>, [], <<>>, Config),
+    {404, _, _} = elli_test:call('GET', <<"/hello/world">>, [], <<>>, Config),
     %% io:fwrite(standard_error, "Res: ~p~n", [Res1]),
 
-    {404, _, _} = Res2 = elli_test:call('GET', <<"/hello/world?q=test">>, [], <<>>, Config),
+    {404, _, _} = elli_test:call('GET', <<"/hello/world?q=test">>, [], <<>>, Config),
     %% io:fwrite(standard_error, "Res: ~p~n", [Res2]),
 
     %% 
-    {200, _, <<"<html><body>Hello from Elli-Webmachine</body></html>\n">>} = Res3 = 
+    {200, _, <<"<html><body>Hello from Elli-Webmachine</body></html>\n">>} = 
         elli_test:call('GET', <<"/test/time">>, [], <<>>, Config),
     %% io:fwrite(standard_error, "Res: ~p~n", [Res3]),
     

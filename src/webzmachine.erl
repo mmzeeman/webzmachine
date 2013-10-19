@@ -70,7 +70,7 @@ request(elli, ElliReq) ->
                 req_headers=Headers,
                 req_body=Body,
                 resp_headers=mochiweb_headers:empty(), %% TODO
-                resp_body = <<>>, %% TODO          
+                resp_body = <<>>, 
                 peer=Peer}.
 
 %% @spec start() -> ok

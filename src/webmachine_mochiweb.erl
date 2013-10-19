@@ -49,9 +49,33 @@ stop() ->
 stop(Name) ->
     mochiweb_http:stop(Name).
 
+%% @doc Get a webmachine request record from a mochiweb request.
+request(MochiReq) ->
+    Socket = MochiReq:get(socket),
+    Scheme = MochiReq:get(scheme),
+    Method = MochiReq:get(method),
+    RawPath = MochiReq:get(raw_path),
+    Version = MochiReq:get(version),
+    Headers = MochiReq:get(headers),
+    %
+    ReqData0 = wrq:create(Socket,Method,Scheme,Version,RawPath,Headers),
+    {Peer, ReqData} = webmachine_request:get_peer(ReqData0),
+    PeerState = wrq:set_peer(Peer, ReqData),
+    LogData = #wm_log_data{req_id=webmachine_id:generate(),
+                           start_time=os:timestamp(),
+                           method=Method,
+                           headers=Headers,
+                           peer=PeerState#wm_reqdata.peer,
+                           path=RawPath,
+                           version=Version,
+                           response_code=404,
+                           response_length=0},
+    PeerState#wm_reqdata{log_data=LogData}.
+
+
 loop(MochiReq, LoopOpts) ->
     reset_process_dictionary(),
-    ReqData = webzmachine:request(mochiweb, MochiReq),
+    ReqData = request(MochiReq),
     Host = case host_headers(ReqData) of
                [H|_] -> H;
                [] -> []
