@@ -24,24 +24,6 @@
 
 -behaviour(elli_handler).
 
-% wrq_request(ElliReq) ->
-%     Socket = ElliReq#req.socket,
-%     Scheme = http, %ElliReq#req.scheme,
-%     Method = ElliReq#req.method,
-
-%     RawPath = ElliReq#req.raw_path, 
-%     Version = ElliReq#req.version,
-%     Headers = ElliReq#req.headers,
-
-%     %
-%     io:fwrite(standard_error, "headers: ~p~n", [Headers]),
-%     ReqData0 = wrq:create(Socket, Method, Scheme, Version, RawPath, Headers),
-
-%     {Peer, ReqData} = webmachine_request:get_peer(ReqData0),
-%     PeerState = wrq:set_peer(Peer, ReqData),
-
-%     PeerState.
-
 handle(#req{}=ElliReq, Args) ->
     %% Delegate to our handler function
     io:fwrite(standard_error, "handle: ~p, ~p~n", [ElliReq, Args]),
@@ -61,16 +43,12 @@ handle(#wm_reqdata{}=ReqData, Args) ->
             ErrorHandler = get_error_handler(),
             {ErrorHTML, ReqState1} = ErrorHandler:render_error(404, ReqDispatch, {none, none, []}),
             ReqState2 = webmachine_request:append_to_response_body(ErrorHTML, ReqState1),
-            %% {ok, ReqState3} = webmachine_request:send_response(404, ReqState2),
-
-            io:fwrite(standard_error, "headers: ~p~n", [ReqState2#wm_reqdata.resp_headers]),
             {404, mochiweb_headers:to_list(ReqState2#wm_reqdata.resp_headers), ReqState2#wm_reqdata.resp_body};
-
         {Mod, ModOpts, HostTokens, Port, PathTokens, Bindings, AppRoot, StringPath} ->
             BootstrapResource = webmachine_controller:new(x,x,x,x),
             {ok, Resource} = BootstrapResource:wrap(ReqData, Mod, ModOpts),
-            {ok,RD1} = webmachine_request:load_dispatch_data(Bindings,HostTokens,Port,PathTokens,AppRoot,StringPath,ReqDispatch),
-            {ok,RD2} = webmachine_request:set_metadata('controller_module', Mod, RD1),
+            {ok, RD1} = webmachine_request:load_dispatch_data(Bindings,HostTokens,Port,PathTokens,AppRoot,StringPath,ReqDispatch),
+            {ok, RD2} = webmachine_request:set_metadata('controller_module', Mod, RD1),
             try 
                 case webmachine_decision_core:handle_request(Resource, RD2) of
                     {_, RsFin, RdFin} ->
@@ -140,13 +118,14 @@ get_error_handler() ->
     end. 
 
 dispatch(Host, Path, ReqData, Args) ->
-    case proplists:get_value(dispatcher, Args) of
-        undefined ->
-            DispatchList = proplists:get_value(dispatch_list, Args, []),
-            {webmachine_dispatcher:dispatch(Host, Path, DispatchList), ReqData};
-        Dispatcher ->
-            Dispatcher:dispatch(Host, Path, ReqData)                                      
-    end.
+    Dispatcher = proplists:get_value(dispatcher, Args),
+    dispatch(Dispatcher, Host, Path, ReqData, Args).
+
+dispatch(undefined, Host, Path, ReqData, Args) ->
+    DispatchList = proplists:get_value(dispatch_list, Args, []),
+    {webmachine_dispatcher:dispatch(Host, Path, DispatchList), ReqData};    
+dispatch(Dispatcher, Host, Path, ReqData, _Args) ->
+    Dispatcher:dispatch(Host, Path, ReqData).
 
 host_headers(ReqData) ->
     [ V || V <- [wrq:get_req_header_lc(H, ReqData)
