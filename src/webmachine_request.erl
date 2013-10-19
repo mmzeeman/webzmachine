@@ -28,6 +28,7 @@
 % actual interface for controller functions
 -export([
      server_header/0,
+     default_server_header/0,
      socket/1,
      method/1,
      version/1,
@@ -562,26 +563,30 @@ make_headers(Code, Transfer, Length, RD) ->
                     LengthHeaders
             end
     end,
-    {ok, ServerHeader} = application:get_env(webzmachine, server_header),
+    ServerHeader = server_header(),
     WithSrv = mochiweb_headers:enter("Server", ServerHeader, Hdrs0),
     Hdrs = case mochiweb_headers:get_value("date", WithSrv) of
-	undefined ->
+	    undefined ->
             mochiweb_headers:enter("Date", httpd_util:rfc1123_date(), WithSrv);
-	_ ->
-	    WithSrv
+	    _ ->
+	        WithSrv
     end,
     F = fun({K, V}, Acc) ->
 		[make_io(K), <<": ">>, V, <<"\r\n">> | Acc]
 	end,
     lists:foldl(F, [<<"\r\n">>], mochiweb_headers:to_list(Hdrs)).
 
+server_header() ->
+    case application:get_env(webzmachine, server_header) of
+        undefined -> default_server_header();
+        {ok, ServerHeader} -> ServerHeader
+    end.
+
+default_server_header() ->
+    "Elli/0.4.1 WebZMachine/" ++ ?WMVSN.    
 
 is_chunked_transfer(HttpVersion, chunked) when HttpVersion > {1,0} -> true;
 is_chunked_transfer(_, _) -> false.
-
-
-server_header() ->
-    "MochiWeb/1.1 WebZMachine/" ++ ?WMVSN.
 
 socket(ReqData) -> ReqData#wm_reqdata.socket.
 

@@ -19,6 +19,11 @@
 
 -export([version/1, peer/1]).
 
+-ifdef(TEST).
+%% The test below acts as a webmachine controller.
+-export([init/1, ping/2, to_html/2]).
+-endif.
+
 -include_lib("elli/include/elli.hrl").
 -include_lib("include/wm_reqdata.hrl").
 
@@ -26,7 +31,6 @@
 
 handle(#req{}=ElliReq, Args) ->
     %% Delegate to our handler function
-    io:fwrite(standard_error, "handle: ~p, ~p~n", [ElliReq, Args]),
     Req = webzmachine:request(elli, ElliReq),
     handle(Req, Args);
 handle(#wm_reqdata{}=ReqData, Args) ->
@@ -37,37 +41,39 @@ handle(#wm_reqdata{}=ReqData, Args) ->
     Path = wrq:path(ReqData),
     {Dispatch, ReqDispatch} = dispatch(Host, Path, ReqData, Args),
 
-    io:fwrite(standard_error, "Dispatch: ~p~n", [Dispatch]),
     case Dispatch of
         {no_dispatch_match, _UnmatchedHost, _UnmatchedPathTokens} ->
             ErrorHandler = get_error_handler(),
             {ErrorHTML, ReqState1} = ErrorHandler:render_error(404, ReqDispatch, {none, none, []}),
             ReqState2 = webmachine_request:append_to_response_body(ErrorHTML, ReqState1),
-            {404, mochiweb_headers:to_list(ReqState2#wm_reqdata.resp_headers), ReqState2#wm_reqdata.resp_body};
+            respond(wrq:set_response_code(404, ReqState2));
         {Mod, ModOpts, HostTokens, Port, PathTokens, Bindings, AppRoot, StringPath} ->
-            BootstrapResource = webmachine_controller:new(x,x,x,x),
-            {ok, Resource} = BootstrapResource:wrap(ReqData, Mod, ModOpts),
-            {ok, RD1} = webmachine_request:load_dispatch_data(Bindings,HostTokens,Port,PathTokens,AppRoot,StringPath,ReqDispatch),
+            {ok, Resource} = webmachine_controller:init(ReqData, Mod, ModOpts),
+            {ok, RD1} = webmachine_request:load_dispatch_data(Bindings, HostTokens, Port, PathTokens, AppRoot, StringPath, ReqDispatch),
             {ok, RD2} = webmachine_request:set_metadata('controller_module', Mod, RD1),
             try 
                 case webmachine_decision_core:handle_request(Resource, RD2) of
                     {_, RsFin, RdFin} ->
-                        EndTime = os:timestamp(),
-                        {_, RdResp} = webmachine_request:send_response(RdFin),
-                        RsFin:stop(RdResp),                       
-                        ok;
+
+                        %% TODO: fix this, need to add headers
+                        %{_, RdResp} = webmachine_request:send_response(RdFin),
+                        webmachine_controller:stop(RsFin, RdFin),
+
+                        respond(RdFin);
                     {upgrade, UpgradeFun, RsFin, RdFin} ->
                         %%TODO: wmtracing 4xx result codes should ignore protocol upgrades? (because the code is 404 by default...)
-                        RsFin:stop(RdFin),
-                        Mod:UpgradeFun(RdFin, RsFin:modstate()),
-                        erlang:put(mochiweb_request_force_close, true)
+                        webmachine_controller:stop(RsFin, RdFin),
+                        Mod:UpgradeFun(RdFin, webmachine_controller:modstate(RsFin)),
+
+                        %% TODO: use elli's handover functionality
+                        exit(not_yet_implemented)
                 end
             catch
-                error:_ -> 
-                    ?WM_DBG({error, erlang:get_stacktrace()}),
-                    {ok,RD3} = webmachine_request:send_response(500, RD2),
-                    Resource:stop(RD3),
-                    webmachine_decision_core:do_log(RD3)
+                error:Error -> 
+                    ?WM_DBG({error, Error, erlang:get_stacktrace()}),
+                    RD3 = RD2#wm_reqdata{response_code=500},
+                    webmachine_controller:stop(Resource, RD3),
+                    respond(RD3)
             end;
         handled ->
             nop
@@ -77,7 +83,7 @@ handle(#wm_reqdata{}=ReqData, Args) ->
 %% @doc: Handle request events, like request completed, exception
 %% thrown, client timeout, etc. Must return 'ok'.
 handle_event(_Event, _Data, _Args) ->
-    io:fwrite(standard_error, "handle_event: ~p ~p ~p~n", [_Event, _Data, _Args]),
+    %io:fwrite(standard_error, "handle_event: ~p ~p ~p~n", [_Event, _Data, _Args]),
     ok.
 
 %%
@@ -108,6 +114,13 @@ socket_peer(Socket) ->
 %%
 %% Helper
 %%
+
+
+respond(Req) ->
+     {Req#wm_reqdata.response_code, 
+      mochiweb_headers:to_list(Req#wm_reqdata.resp_headers),
+      Req#wm_reqdata.resp_body}.
+
 
 get_error_handler() ->
     case application:get_env(webzmachine, error_handler) of
@@ -143,21 +156,37 @@ host_headers(ReqData) ->
 
 -include_lib("eunit/include/eunit.hrl").
 
-elli_test() ->
+init(_Args) ->
+    {ok, undefined}.
+
+ping(ReqData, State) ->
+    {pong, ReqData, State}.
+
+to_html(ReqData, State) ->
+    Body = io_lib:format("<html><body>~s</body></html>~n",
+                         [erlang:iolist_to_binary(<<"Hello from Elli-Webmachine">>)]),
+    {Body, ReqData, State}.
+
+elli_webmachine_test() ->
+    DispatchList = [{["test", "time"], webmachine_elli, []}],
+
     Config = [
               {callback, elli_middleware},
               {callback_args,
-               [{mods, [
-                        {webmachine_elli, [test, bla]}
-                        ]}]}
-              ],
+               [{mods, [{webmachine_elli, [{dispatch_list, DispatchList}]}]}
+              ]}],
 
     {404, _, _} = Res1 = elli_test:call('GET', <<"/hello/world">>, [], <<>>, Config),
-    io:fwrite(standard_error, "Res: ~p~n", [Res1]),
+    %% io:fwrite(standard_error, "Res: ~p~n", [Res1]),
 
     {404, _, _} = Res2 = elli_test:call('GET', <<"/hello/world?q=test">>, [], <<>>, Config),
-    io:fwrite(standard_error, "Res: ~p~n", [Res2]),
+    %% io:fwrite(standard_error, "Res: ~p~n", [Res2]),
 
+    %% 
+    {200, _, <<"<html><body>Hello from Elli-Webmachine</body></html>\n">>} = Res3 = 
+        elli_test:call('GET', <<"/test/time">>, [], <<>>, Config),
+    %% io:fwrite(standard_error, "Res: ~p~n", [Res3]),
+    
     ok.
 
 -endif.

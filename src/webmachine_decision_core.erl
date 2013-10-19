@@ -70,6 +70,7 @@ d(DecisionID, Rs, Rd) ->
     decision(DecisionID, Rs, Rd).
 
 respond(Code, Rs, Rd) ->
+    io:fwrite("respond: ~p ~p ~p~n", [Code, Rs, Rd]),
     {RsCode, RdCode} = case Code of
         Code when Code =:= 403; Code =:= 404; Code =:= 410 ->
             {ok, ErrorHandler} = application:get_env(webzmachine, error_handler),
@@ -100,12 +101,18 @@ respond(Code, Headers, Rs, Rd) ->
     respond(Code, Rs, RdHs).
 
 error_response(Code, Reason, Rs, Rd) ->
-    {ok, ErrorHandler} = application:get_env(webzmachine, error_handler),
+    ErrorHandler = error_handler(),
     {ErrorHTML, Rd1} = ErrorHandler:render_error(Code, Rd, Reason),
     Rd2 = wrq:set_resp_body(ErrorHTML, Rd1),
     respond(Code, Rs, Rd2).
 error_response(Reason, Rs, Rd) ->
     error_response(500, Reason, Rs, Rd).
+
+error_handler() ->
+    case application:get_env(webzmachine, error_handler) of
+        undefined -> webmachine_error_handler;
+        {ok, ErrorHandler} -> ErrorHandler
+    end.
 
 decision_test({Test, Rs, Rd}, TestVal, TrueFlow, FalseFlow) ->
     decision_test(Test, TestVal, TrueFlow, FalseFlow, Rs, Rd).

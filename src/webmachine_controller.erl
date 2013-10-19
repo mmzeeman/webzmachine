@@ -115,45 +115,14 @@ default(_) ->
           
 init(ReqData, Mod, Args) ->
     {ok, ModState} = Mod:init(Args),
-    [{trace_dir, Dir}] = ets:lookup(?WMTRACE_CONF_TBL, trace_dir),
-    ToTrace = case {ets:lookup(?WMTRACE_CONF_TBL, trace_global), 
-                    ets:lookup(?WMTRACE_CONF_TBL, Mod)} of
-                  {_, [{Mod, Eagerness_}]} ->
-                      {true, Eagerness_};
-                  {[{trace_global, Policy}], _} ->
-                      PolicyFun = 
-                          case Policy of
-                              '5xx' ->
-                                  fun(RspCode) ->
-                                          if 
-                                              RspCode >= 500  
-                                                  andalso RspCode =< 599 -> 
-                                                  flush;
-                                              true -> drop
-                                          end
-                                  end;
-                              '4xx&5xx' -> 
-                                  fun(RspCode) ->
-                                          if 
-                                              RspCode >= 400  
-                                                  andalso RspCode =< 599 -> 
-                                                  flush;
-                                              true -> drop
-                                          end
-                                  end                                 
-                          end,
-                      {true, {at_once, PolicyFun}};
-                  {_, _} ->
-                      false
-              end,
-    case ToTrace of
+    case to_trace(Mod) of
         false ->
             {ok, #wm_controller{
                     mod=Mod,
                     mod_state=ModState,
                     mod_exports=[ F || {F,_} <- Mod:module_info(exports) ],
                     trace=false}};
-        {true, Eagerness} ->
+        {true, Dir, Eagerness} ->
             {ok, LoggerProc} = start_log_proc(Dir, Mod, Eagerness),
             ReqId = (ReqData#wm_reqdata.log_data)#wm_log_data.req_id,        
             log_reqid(LoggerProc, ReqId),
@@ -167,6 +136,46 @@ init(ReqData, Mod, Args) ->
                     trace=LoggerProc}};
         _ ->
             {stop, bad_init_arg}
+    end.
+
+to_trace(Mod) ->
+    case ets:info(?WMTRACE_CONF_TBL, size) of
+        undefined -> 
+            false;
+        _ ->
+            to_trace(?WMTRACE_CONF_TBL, Mod)
+    end.
+
+to_trace(WmTraceConfTbl, Mod) ->
+    [{trace_dir, Dir}] = ets:lookup(WmTraceConfTbl, trace_dir),
+    case {ets:lookup(WmTraceConfTbl, trace_global), ets:lookup(WmTraceConfTbl, Mod)} of
+        {_, [{Mod, Eagerness_}]} ->
+            {true, Dir, Eagerness_};
+        {[{trace_global, Policy}], _} ->
+            PolicyFun = 
+                case Policy of
+                    '5xx' ->
+                        fun(RspCode) ->
+                                if 
+                                    RspCode >= 500  
+                                        andalso RspCode =< 599 -> 
+                                        flush;
+                                    true -> drop
+                                end
+                        end;
+                    '4xx&5xx' -> 
+                        fun(RspCode) ->
+                                if 
+                                    RspCode >= 400  
+                                        andalso RspCode =< 599 -> 
+                                        flush;
+                                    true -> drop
+                                end
+                        end                                 
+                end,
+            {true, Dir, {at_once, PolicyFun}};
+        {_, _} ->
+            false
     end.
 
 modstate(Controller) ->

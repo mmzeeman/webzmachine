@@ -62,8 +62,6 @@ request(elli, ElliReq) ->
 
     {Path, _, _} = mochiweb_util:urlsplit_path(RawPath),
 
-    io:fwrite(standard_error, "path: ~p~n", [Path]),
-
     #wm_reqdata{method=Method,
                 version=Version, 
                 path=Path, 
@@ -79,7 +77,7 @@ request(elli, ElliReq) ->
 %% @doc Start the webmachine server.
 start() ->
     webmachine_deps:ensure(),
-    application:set_env(webzmachine, server_header, webmachine_request:server_header()),
+    application:set_env(webzmachine, server_header, webmachine_request:default_server_header()),
     application:start(crypto),
     application:start(webzmachine).
 

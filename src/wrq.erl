@@ -195,11 +195,9 @@ get_resp_header(HdrName, _RD=#wm_reqdata{resp_headers=RespH}) ->
 
 set_resp_header(K, V, RD=#wm_reqdata{resp_headers=RespH})
   when is_list(K),is_list(V) ->
-    io:fwrite(standard_error, "resp-header: ~p: ~p~n", [K, V]),
     RD#wm_reqdata{resp_headers=mochiweb_headers:enter(K, V, RespH)};
 set_resp_header(K, V, RD=#wm_reqdata{resp_headers=RespH})
   when is_list(K),is_binary(V) ->
-    io:fwrite(standard_error, "resp-header: ~p: ~p~n", [K, V]),
     RD#wm_reqdata{resp_headers=mochiweb_headers:enter(K, binary_to_list(V), RespH)}.
 
 set_resp_headers(Hdrs, RD=#wm_reqdata{resp_headers=RespH}) ->
